@@ -99,11 +99,27 @@ def get_coordinates(city_name) -> Tuple[float, float]:
     headers = {"User-Agent": "Mozilla/5.0"}
     r = requests.get(geocode_url, params=params, headers=headers)
     data = r.json()
+    print(data)
     if not data:
         raise Exception(f"Ville introuvable : {city_name}")
     lat = float(data[0]["lat"])
     lon = float(data[0]["lon"])
     return lat, lon
+
+def get_coordinates_test(city_name):
+    API_KEY = "b6cf1eceaa703e0b9f80b3f9453ff79a"
+    GEOCODING_URL = 'http://api.openweathermap.org/geo/1.0/direct?'
+    params = {
+        'q': city_name,
+        'appid': API_KEY,
+        'limit': 1
+    }
+    response = requests.get(GEOCODING_URL, params=params)
+    data = response.json()
+    if data and len(data) > 0 and 'lat' in data[0] and 'lon' in data[0]:
+        return data[0]['lat'], data[0]['lon']
+    else:
+        return None, None
 
 def get_weather_forecast(city_name: str) -> pd.DataFrame:
     url = "https://api.open-meteo.com/v1/forecast"

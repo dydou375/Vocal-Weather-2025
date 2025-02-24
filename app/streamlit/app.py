@@ -20,13 +20,17 @@ def extract_entities_ville(text):
     res = requests.get("http://localhost:8000/ville", params={"text": text})
     return res.json()
 
-def get_coordinates(city_name):
-    res = requests.get("http://localhost:8000/ville_coordonnees", params={"city_name": city_name})
+def get_coordinates_V2(city_name):
+    res = requests.get("http://localhost:8000/ville_coordonnees_V2", params={"city_name": city_name})
     try:
         return res.json()
     except requests.exceptions.JSONDecodeError:
         st.error("Erreur lors de la récupération des coordonnées. La réponse de l'API est vide ou mal formée.")
         return None
+    
+def get_coordinates_V1(city_name):
+    res = requests.get("http://localhost:8000/ville_coordonnees_V1", params={"city_name": city_name})
+    return res.json()
 
 def get_meteo_prevision(city_name):
     res = requests.get("http://localhost:8000/meteo_prevision", params={"city_name": city_name})
@@ -45,7 +49,7 @@ st.title("Application Météo avec Open Météo")
 bouton_vocal = st.text_input("VEUILLEZ ENTREZ LE NOM DE LA VILLE")
 if bouton_vocal:
     city_name = extract_entities_ville(bouton_vocal)
-    coordinates = get_coordinates(city_name)
+    coordinates = get_coordinates_V2(city_name)
     st.write(f"Ville: {city_name}")
     
     if not city_name:
