@@ -73,7 +73,7 @@ def extract_dates(text):
             dates.append((ent.text, ent._.date))
     return dates
 
-def horizon(text):
+def get_horizon(text):
     """
     Extrait les dates d'un texte et les convertit en format standard (YYYY-MM-DD).
     Utilise dateparser pour gérer les dates relatives.
@@ -93,20 +93,7 @@ def horizon(text):
 
     return dates_normalisées
 
-def get_coordinates(city_name) -> Tuple[float, float]:
-    geocode_url = "https://nominatim.openstreetmap.org/search"
-    params = {"q": city_name, "format": "json"}
-    headers = {"User-Agent": "Mozilla/5.0"}
-    r = requests.get(geocode_url, params=params, headers=headers)
-    data = r.json()
-    print(data)
-    if not data:
-        raise Exception(f"Ville introuvable : {city_name}")
-    lat = float(data[0]["lat"])
-    lon = float(data[0]["lon"])
-    return lat, lon
-
-def get_coordinates_test(city_name):
+def get_coordinates_V1(city_name):
     API_KEY = "b6cf1eceaa703e0b9f80b3f9453ff79a"
     GEOCODING_URL = 'http://api.openweathermap.org/geo/1.0/direct?'
     params = {
@@ -120,32 +107,81 @@ def get_coordinates_test(city_name):
         return data[0]['lat'], data[0]['lon']
     else:
         return None, None
+    
+    
+def get_coordinates_V2(city_name) -> Tuple[float, float]:
+    geocode_url = "https://nominatim.openstreetmap.org/search"
+    params = {"q": city_name, "format": "json"}
+    headers = {"User-Agent": "Mozilla/5.0"}
+    r = requests.get(geocode_url, params=params, headers=headers)
+    data = r.json()
+    print(data)
+    if not data:
+        raise Exception(f"Ville introuvable : {city_name}")
+    lat = float(data[0]["lat"])
+    lon = float(data[0]["lon"])
+    return lat, lon
 
-def get_weather_forecast(city_name: str) -> pd.DataFrame:
-    url = "https://api.open-meteo.com/v1/forecast"
-    try:
-        lat, lon = get_coordinates(city_name)
-        print(lat, lon)
-    except Exception as e:
-        print(f"Erreur lors de la récupération des coordonnées de la ville {city_name}: {e}")
-        return pd.DataFrame()
-    params = {
-        "latitude": lat,
-        "longitude": lon,
-        "hourly": "temperature_2m,cloudcover,windspeed_10m",
-        "timezone": "auto"
-    }
-    response = retry_session.get(url, params=params)
-    data = response.json()
-    times = pd.to_datetime(data['hourly']['time'])
-    df = pd.DataFrame({
-        "date": times,
-        "temperature_2m": data['hourly']['temperature_2m'],
-        "cloudcover": data['hourly']['cloudcover'],
-        "windspeed_10m": data['hourly']['windspeed_10m'],
-        "pm2_5": [12.3] * len(times)
-    })
-    return df
+
+def get_weather_forecast(city_name):
+    cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
+    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+    openmeteo = openmeteo_requests.Client(session=retry_session)
+    if city_name == "":
+        return None
+    else:
+        lat, lon = get_coordinates_V2(city_name)
+
+    if lat is None or lon is None:
+        return None
+    else:
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "hourly": "temperature_2m,rain,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,is_day",
+            "timezone": "Europe/Paris",
+            "timezone_abbreviation": "CET"
+        }
+
+    responses = openmeteo.weather_api(url, params=params)
+
+    # Process first location. Add a for-loop for multiple locations or weather models
+    response = responses[0]
+    print(f"Coordinates {response.Latitude()}°N {response.Longitude()}°E")
+    print(f"Elevation {response.Elevation()} m asl")
+    print(f"Timezone {response.Timezone()} {response.TimezoneAbbreviation()}")
+    print(f"Timezone difference to GMT+0 {response.UtcOffsetSeconds()} s")
+
+    # Process hourly data. The order of variables needs to be the same as requested.
+    hourly = response.Hourly()
+    hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
+    hourly_rain = hourly.Variables(1).ValuesAsNumpy()
+    hourly_cloud_cover = hourly.Variables(2).ValuesAsNumpy()
+    hourly_cloud_cover_low = hourly.Variables(3).ValuesAsNumpy()
+    hourly_cloud_cover_mid = hourly.Variables(4).ValuesAsNumpy()
+    hourly_cloud_cover_high = hourly.Variables(5).ValuesAsNumpy()
+    hourly_wind_speed_10m = hourly.Variables(6).ValuesAsNumpy()
+    hourly_is_day = hourly.Variables(7).ValuesAsNumpy()
+
+    hourly_data = {"date": pd.date_range(
+        start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+        end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+        freq=pd.Timedelta(seconds=hourly.Interval()),
+        inclusive="left"
+    )}
+
+    hourly_data["temperature_2m"] = hourly_temperature_2m.tolist()
+    hourly_data["rain"] = hourly_rain.tolist()
+    hourly_data["cloud_cover"] = hourly_cloud_cover.tolist()
+    hourly_data["cloud_cover_low"] = hourly_cloud_cover_low.tolist()
+    hourly_data["cloud_cover_mid"] = hourly_cloud_cover_mid.tolist()
+    hourly_data["cloud_cover_high"] = hourly_cloud_cover_high.tolist()
+    hourly_data["wind_speed_10m"] = hourly_wind_speed_10m.tolist()
+    hourly_data["is_day"] = hourly_is_day.tolist()
+
+    hourly_dataframe = pd.DataFrame(data=hourly_data)
+    return hourly_dataframe
 
 
 def monitoring():

@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-import features
+import features as features
 
 
 app = FastAPI()
@@ -15,12 +15,12 @@ def reconnaissance():
 
 #---------------------------------- Ville (Extraction Entités)  ----------------------------------
 @app.get("/ville")
-def ville(ville):
+def ville(text):
     #text
-    return features.extract_entities_ville(ville)
+    return features.extract_entities_ville(text)
 
 #---------------------------------- Ville (Coordonnées Version 1)  ----------------------------------
-@app.get("/ville_coordonnees")
+@app.get("/ville_coordonnees_V1")
 def ville_coordonnees_V1(ville):
     return features.get_coordinates_test(ville)
 
@@ -31,8 +31,8 @@ def ville_coordonnees_V2(ville):
 
 #---------------------------------- Météo ----------------------------------
 @app.get("/meteo_prevision")
-def meteo(ville):
-    return features.get_weather_forecast(ville)
+def meteo(city_name):
+    return features.get_weather_forecast(city_name)
 
 
 #---------------------------------- Monitoring ----------------------------------
