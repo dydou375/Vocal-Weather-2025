@@ -13,13 +13,14 @@ def reconnaissance():
     return features.recognize_from_microphone()
 
 @app.get("/ville")
-def ville():
-    ville =features.extract_entities_ville()
+def ville(ville):
+    #text
+    ville = features.extract_entities_ville(ville)
     return features.get_coordinates(ville)
 
 @app.get("/horizon")
-def horizon():
-    return features.horizon()
+def horizon(ville):
+    return features.horizon(ville)
 
 @app.get("/meteo")
 def meteo():
@@ -28,3 +29,7 @@ def meteo():
 @app.get("/meteo_prevision")
 def meteo_prevision():
     return features.get_weather_forecast()
+
+@app.get("/monitoring")
+def monitoring():
+    return features.monitoring()

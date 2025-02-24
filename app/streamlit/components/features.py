@@ -129,3 +129,7 @@ def get_weather_forecast(lat, lon):
     }   
     response = requests.get(WEATHER_URL_PREVISION, params=params)
     return response.json()
+
+
+def monitoring():
+    return "Monitoring"

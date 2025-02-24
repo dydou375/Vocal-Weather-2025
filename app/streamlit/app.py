@@ -34,7 +34,7 @@ def get_meteo_prevision():
 
 #---------------------- Interface Streamlit ---------------------------------
 
-st.title("Application Météo avec OpenWeatherMap")
+st.title("Application Météo avec Open Météo")
 
 # Utiliser la reconnaissance vocale pour obtenir la commande
 bouton_vocal = st.text_area("meteo")
