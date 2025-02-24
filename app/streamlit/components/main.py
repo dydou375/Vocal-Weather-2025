@@ -15,20 +15,19 @@ def reconnaissance():
 @app.get("/ville")
 def ville(ville):
     #text
-    ville = features.extract_entities_ville(ville)
+    return features.extract_entities_ville(ville)
+
+@app.get("/ville_coordonnees")
+def ville_coordonnees(ville):
     return features.get_coordinates(ville)
 
-@app.get("/horizon")
+@app.get("/horizon_date")
 def horizon(ville):
     return features.horizon(ville)
 
-@app.get("/meteo")
-def meteo():
-    return features.get_weather()
-
 @app.get("/meteo_prevision")
-def meteo_prevision():
-    return features.get_weather_forecast()
+def meteo(ville):
+    return features.get_weather_forecast(ville)
 
 @app.get("/monitoring")
 def monitoring():

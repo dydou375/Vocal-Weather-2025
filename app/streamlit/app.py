@@ -1,3 +1,4 @@
+import pandas as pd
 import streamlit as st
 import requests
 from dotenv import load_dotenv
@@ -11,24 +12,28 @@ import dateparser
     res = requests.get("http://localhost:8000/reconnaissance", params={})
     return res.json()"""
 
-def get_coordinates():
-    res = requests.get("http://localhost:8000/coordinates", params={})
-    return res.json()
-
-def get_ville(text):
+"""def get_horizon(city_name):
+    res = requests.get("http://localhost:8000/horizon_date", params={"city_name": city_name})
+    return res.json()"""
+    
+def extract_entities_ville(text):
     res = requests.get("http://localhost:8000/ville", params={"text": text})
     return res.json()
 
-def get_horizon(text):
-    res = requests.get("http://localhost:8000/horizon", params={"text": text})
-    return res.json()   
+def get_coordinates(city_name):
+    res = requests.get("http://localhost:8000/ville_coordonnees", params={"city_name": city_name})
+    try:
+        return res.json()
+    except requests.exceptions.JSONDecodeError:
+        st.error("Erreur lors de la récupération des coordonnées. La réponse de l'API est vide ou mal formée.")
+        return None
 
-def get_meteo():
-    res = requests.get("http://localhost:8000/meteo", params={})
+def get_meteo_prevision(city_name):
+    res = requests.get("http://localhost:8000/meteo_prevision", params={"city_name": city_name})
     return res.json()
 
-def get_meteo_prevision():
-    res = requests.get("http://localhost:8000/meteo_prevision", params={})
+def get_monitoring():
+    res = requests.get("http://localhost:8000/monitoring", params={})
     return res.json()   
 
 
@@ -37,36 +42,19 @@ def get_meteo_prevision():
 st.title("Application Météo avec Open Météo")
 
 # Utiliser la reconnaissance vocale pour obtenir la commande
-bouton_vocal = st.text_area("meteo")
-
+bouton_vocal = st.text_input("VEUILLEZ ENTREZ LE NOM DE LA VILLE")
 if bouton_vocal:
-    city_name = get_ville(bouton_vocal)
-    horizon = get_horizon(bouton_vocal)
-    
+    city_name = extract_entities_ville(bouton_vocal)
+    coordinates = get_coordinates(city_name)
     st.write(f"Ville: {city_name}")
-    st.write(f"Horizon: {horizon}")
     
     if not city_name:
         st.error("Ville non reconnue dans la commande.")
     else:
-        lat, lon = get_coordinates(city_name)
-        
-        
-        if lat is None or lon is None:
-            st.error("Ville non trouvée ou erreur dans la requête.")
+        weather_data = get_meteo_prevision(city_name)
+        if weather_data.get('cod') != 200:
+            st.error("Erreur dans la récupération des données météorologiques.")
         else:
-            weather_data = get_meteo(lat, lon)
-            
-            if weather_data.get('cod') != 200:
-                st.error("Erreur dans la récupération des données météorologiques.")
-            else:
-                temperature = weather_data['main']['temp']
-                description = weather_data['weather'][0]['description']
-                st.write(f"La température actuelle à {city_name} est de {temperature}°C avec {description}.")
-
-                
-                if horizon:
-                    weather_data_forecast = get_meteo_prevision(lat, lon)
-                    st.write(f"Prévision pour : {horizon}")
-                    st.write(f"Prévision pour : {weather_data_forecast}")
+            st.write(f"Prévision pour : {weather_data}")
+            st.dataframe(weather_data)
 

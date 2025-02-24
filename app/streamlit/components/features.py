@@ -21,10 +21,6 @@ openmeteo = openmeteo_requests.Client(session=retry_session)
 
 dotenv.load_dotenv(r"Vocal_Weather\var.env")
 
-API_KEY = "b6cf1eceaa703e0b9f80b3f9453ff79a"
-WEATHER_URL = "https://api.open-meteo.com/v1/forecast"
-WEATHER_URL_PREVISION = 'http://api.openweathermap.org/data/2.5/forecast'
-GEOCODING_URL = 'http://api.openweathermap.org/geo/1.0/direct?'
 
 def recognize_from_microphone():
     # This example requires environment variables named "SPEECH_KEY" and "SPEECH_REGION"
@@ -50,9 +46,10 @@ def recognize_from_microphone():
 
 
 # Charger le modèle de langue française
-nlp = spacy.load("fr_core_news_md")
+#nlp = spacy.load("fr_core_news_md")
 
 def extract_entities_ville(text):
+    nlp = spacy.load("fr_core_news_md")
     doc = nlp(text)
     city_name = None
     horizon = None
@@ -63,11 +60,13 @@ def extract_entities_ville(text):
 
     return city_name
 
-nlp_en = spacy.blank('fr')
-nlp_en.add_pipe('find_dates')
+nlp_fr = spacy.blank('fr')
+nlp_fr.add_pipe('find_dates')
 
 def extract_dates(text):
-    doc = nlp_en(text)
+    nlp_fr = spacy.blank('fr')
+    nlp_fr.add_pipe('find_dates')
+    doc = nlp_fr(text)
     dates = []
     for ent in doc.ents:
         if ent.label_ == 'DATE':
@@ -79,10 +78,10 @@ def horizon(text):
     Extrait les dates d'un texte et les convertit en format standard (YYYY-MM-DD).
     Utilise dateparser pour gérer les dates relatives.
     """
-    doc = nlp(text)
+    doc_dates = extract_dates(text)
     dates_normalisées = []
 
-    for ent in doc.ents:
+    for ent in doc_dates:
         if ent.label_ == "DATE":
             date_str = ent.text.lower()
 
@@ -94,7 +93,7 @@ def horizon(text):
 
     return dates_normalisées
 
-def get_coordinates(city_name: str) -> Tuple[float, float]:
+def get_coordinates(city_name) -> Tuple[float, float]:
     geocode_url = "https://nominatim.openstreetmap.org/search"
     params = {"q": city_name, "format": "json"}
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -106,29 +105,31 @@ def get_coordinates(city_name: str) -> Tuple[float, float]:
     lon = float(data[0]["lon"])
     return lat, lon
 
-def get_weather(lat, lon):
-    
+def get_weather_forecast(city_name: str) -> pd.DataFrame:
+    url = "https://api.open-meteo.com/v1/forecast"
+    try:
+        lat, lon = get_coordinates(city_name)
+        print(lat, lon)
+    except Exception as e:
+        print(f"Erreur lors de la récupération des coordonnées de la ville {city_name}: {e}")
+        return pd.DataFrame()
     params = {
         "latitude": lat,
         "longitude": lon,
-        "hourly": ["temperature_2m", "rain", "cloud_cover", "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high", "wind_speed_10m", "is_day"],
-        "past_minutely_15": 96,
-        "forecast_minutely_15": 96,
-        "temporal_resolution": "hourly_6",
-        "models": "meteofrance_seamless"
+        "hourly": "temperature_2m,cloudcover,windspeed_10m",
+        "timezone": "auto"
     }
-    responses = openmeteo.weather_api(WEATHER_URL, params=params)
-    return responses.json()
-
-def get_weather_forecast(lat, lon):
-    params = {
-        'lat': lat,
-        'lon': lon,
-        'appid': API_KEY,
-        'units': 'metric'
-    }   
-    response = requests.get(WEATHER_URL_PREVISION, params=params)
-    return response.json()
+    response = retry_session.get(url, params=params)
+    data = response.json()
+    times = pd.to_datetime(data['hourly']['time'])
+    df = pd.DataFrame({
+        "date": times,
+        "temperature_2m": data['hourly']['temperature_2m'],
+        "cloudcover": data['hourly']['cloudcover'],
+        "windspeed_10m": data['hourly']['windspeed_10m'],
+        "pm2_5": [12.3] * len(times)
+    })
+    return df
 
 
 def monitoring():
