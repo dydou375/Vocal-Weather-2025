@@ -12,6 +12,7 @@ import openmeteo_requests
 import requests_cache
 import pandas as pd
 from retry_requests import retry
+import streamlit as st
 
 # Configuration du client Open-Meteo API avec cache et retry en cas d'erreur
 cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
@@ -20,21 +21,24 @@ openmeteo = openmeteo_requests.Client(session=retry_session)
 
 
 dotenv.load_dotenv(r"Vocal_Weather\var.env")
+SPEECH_KEY = "54124b94ae904eeea1d8a652a4c3d88d"
+SPEECH_REGION = "francecentral"
 
 
 def recognize_from_microphone():
     # This example requires environment variables named "SPEECH_KEY" and "SPEECH_REGION"
-    speech_config = speechsdk.SpeechConfig(subscription=os.environ.get('SPEECH_KEY'), region=os.environ.get('SPEECH_REGION'))
+    speech_config = speechsdk.SpeechConfig(subscription=SPEECH_KEY, region=SPEECH_REGION)
     speech_config.speech_recognition_language="fr-FR"
 
     audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
     speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
 
-    print("Speak into your microphone.")
+    st.write("Speak into your microphone.")
     speech_recognition_result = speech_recognizer.recognize_once_async().get()
 
     if speech_recognition_result.reason == speechsdk.ResultReason.RecognizedSpeech:
         print("Recognized: {}".format(speech_recognition_result.text))
+        return speech_recognition_result.text
     elif speech_recognition_result.reason == speechsdk.ResultReason.NoMatch:
         print("No speech could be recognized: {}".format(speech_recognition_result.no_match_details))
     elif speech_recognition_result.reason == speechsdk.ResultReason.Canceled:
@@ -43,10 +47,7 @@ def recognize_from_microphone():
         if cancellation_details.reason == speechsdk.CancellationReason.Error:
             print("Error details: {}".format(cancellation_details.error_details))
             print("Did you set the speech resource key and region values?")
-
-
-# Charger le modèle de langue française
-#nlp = spacy.load("fr_core_news_md")
+        return None
 
 def extract_entities_ville(text):
     nlp = spacy.load("fr_core_news_md")
@@ -59,39 +60,6 @@ def extract_entities_ville(text):
             city_name = ent.text
 
     return city_name
-
-nlp_fr = spacy.blank('fr')
-nlp_fr.add_pipe('find_dates')
-
-def extract_dates(text):
-    nlp_fr = spacy.blank('fr')
-    nlp_fr.add_pipe('find_dates')
-    doc = nlp_fr(text)
-    dates = []
-    for ent in doc.ents:
-        if ent.label_ == 'DATE':
-            dates.append((ent.text, ent._.date))
-    return dates
-
-def get_horizon(text):
-    """
-    Extrait les dates d'un texte et les convertit en format standard (YYYY-MM-DD).
-    Utilise dateparser pour gérer les dates relatives.
-    """
-    doc_dates = extract_dates(text)
-    dates_normalisées = []
-
-    for ent in doc_dates:
-        if ent.label_ == "DATE":
-            date_str = ent.text.lower()
-
-            # Utiliser dateparser pour reconnaître toutes les dates (relatives et absolues)
-            date_obj = dateparser.parse(date_str, languages=["fr"])
-
-            if date_obj:
-                dates_normalisées.append(date_obj.strftime(f"%d-%m-%Y"))
-
-    return dates_normalisées
 
 def get_coordinates_V1(city_name):
     API_KEY = "b6cf1eceaa703e0b9f80b3f9453ff79a"
@@ -182,6 +150,27 @@ def get_weather_forecast(city_name):
 
     hourly_dataframe = pd.DataFrame(data=hourly_data)
     return hourly_dataframe
+
+def get_weather_forecast_seb(city_name: str) -> pd.DataFrame:
+    lat, lon = get_coordinates_V2(city_name)
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "hourly": "temperature_2m,cloudcover,windspeed_10m",
+        "timezone": "auto"
+    }
+    response = retry_session.get(url, params=params)
+    data = response.json()
+    times = pd.to_datetime(data['hourly']['time'])
+    df = pd.DataFrame({
+        "date": times,
+        "temperature_2m": data['hourly']['temperature_2m'],
+        "cloudcover": data['hourly']['cloudcover'],
+        "windspeed_10m": data['hourly']['windspeed_10m'],
+        "pm2_5": [12.3] * len(times)
+    })
+    return df
 
 
 def monitoring():
