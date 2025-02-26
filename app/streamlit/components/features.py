@@ -1,26 +1,51 @@
 import os
+import json
+import datetime
+import logging
 import azure.cognitiveservices.speech as speechsdk
 import dotenv
-import requests 
+import requests
 import spacy
-import dateparser
-from datetime import datetime
-from date_spacy import find_dates
-from typing import Tuple
+import pandas as pd
+import re
+import uvicorn
+import threading
+import time
+import tempfile
+from functools import wraps
+from typing import Tuple, Callable
+
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response, Request
+from pydantic import BaseModel
+
+import streamlit as st
+import requests_cache
+from retry_requests import retry
+
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 import openmeteo_requests
-import requests_cache
-import pandas as pd
-from retry_requests import retry
-import streamlit as st
 
-# Configuration du client Open-Meteo API avec cache et retry en cas d'erreur
+# Configuration PostgreSQL (Azure)
+DB_USER = os.getenv("DB_USER", "dylan")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "GRETAP4!2025***")
+DB_HOST = os.getenv("DB_HOST", "vw-dylan.postgres.database.azure.com")
+DB_NAME = os.getenv("DB_NAME", "postgres")
+
+#Chargement des variables d'environnement
+dotenv.load_dotenv(r"Vocal_Weather\var.env")
+
+#Configuration du logging
+logging.basicConfig(level=logging.INFO)
+nlp = spacy.load("fr_core_news_md")
+logs = []
+
+#Configuration du client Open-Meteo API avec cache et retry en cas d'erreur
 cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
 retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
 openmeteo = openmeteo_requests.Client(session=retry_session)
 
-
-dotenv.load_dotenv(r"Vocal_Weather\var.env")
 SPEECH_KEY = "54124b94ae904eeea1d8a652a4c3d88d"
 SPEECH_REGION = "francecentral"
 
@@ -33,48 +58,66 @@ def recognize_from_microphone():
     audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
     speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
 
-    st.write("Speak into your microphone.")
-    speech_recognition_result = speech_recognizer.recognize_once_async().get()
-
-    if speech_recognition_result.reason == speechsdk.ResultReason.RecognizedSpeech:
-        print("Recognized: {}".format(speech_recognition_result.text))
-        return speech_recognition_result.text
-    elif speech_recognition_result.reason == speechsdk.ResultReason.NoMatch:
-        print("No speech could be recognized: {}".format(speech_recognition_result.no_match_details))
-    elif speech_recognition_result.reason == speechsdk.ResultReason.Canceled:
-        cancellation_details = speech_recognition_result.cancellation_details
-        print("Speech Recognition canceled: {}".format(cancellation_details.reason))
-        if cancellation_details.reason == speechsdk.CancellationReason.Error:
-            print("Error details: {}".format(cancellation_details.error_details))
-            print("Did you set the speech resource key and region values?")
-        return None
+    st.info("Veuillez parler... (attendez la fin de l'enregistrement)")
+    retry_attempts = 3
+    for attempt in range(retry_attempts):
+        speech_recognition_result = speech_recognizer.recognize_once_async().get()
+        if speech_recognition_result.reason == speechsdk.ResultReason.RecognizedSpeech:
+            print("Recognized: {}".format(speech_recognition_result.text))
+            return speech_recognition_result.text
+        elif speech_recognition_result.reason == speechsdk.ResultReason.NoMatch:
+            print("No speech could be recognized: {}".format(speech_recognition_result.no_match_details))
+        elif speech_recognition_result.reason == speechsdk.ResultReason.Canceled:
+            cancellation_details = speech_recognition_result.cancellation_details
+            print("Speech Recognition canceled: {}".format(cancellation_details.reason))
+            if cancellation_details.reason == speechsdk.CancellationReason.Error:
+                print("Error details: {}".format(cancellation_details.error_details))
+                print("Did you set the speech resource key and region values?")
+            return None
+        else:
+            print(f"Erreur de reconnaissance vocale: {speech_recognition_result.reason}")
+            return None
 
 def extract_entities_ville(text):
-    nlp = spacy.load("fr_core_news_md")
     doc = nlp(text)
-    city_name = None
-    horizon = None
-
+    location = None
     for ent in doc.ents:
-        if ent.label_ == "LOC":  # Pour les lieux, y compris les villes
-            city_name = ent.text
+        if ent.label_ in ["LOC", "GPE"] and not location:
+            location = ent.text
+    if not location:
+        location = "Paris"
+    return location
 
-    return city_name
-
-def get_coordinates_V1(city_name):
-    API_KEY = "b6cf1eceaa703e0b9f80b3f9453ff79a"
-    GEOCODING_URL = 'http://api.openweathermap.org/geo/1.0/direct?'
-    params = {
-        'q': city_name,
-        'appid': API_KEY,
-        'limit': 1
-    }
-    response = requests.get(GEOCODING_URL, params=params)
-    data = response.json()
-    if data and len(data) > 0 and 'lat' in data[0] and 'lon' in data[0]:
-        return data[0]['lat'], data[0]['lon']
-    else:
-        return None, None
+def spacy_analyze(text: str) -> Tuple[str, int]:
+    doc = nlp(text)
+    location = None
+    forecast_days = None
+    regex_match = re.search(r"sur\s+(\d+)\s+jours", text, re.IGNORECASE)
+    if regex_match:
+        try:
+            num = int(regex_match.group(1))
+            if num in [3, 5, 7]:
+                forecast_days = num
+        except Exception as e:
+            logging.error(f"Erreur extraction jours: {e}")
+    if not forecast_days:
+        for token in doc:
+            if token.like_num:
+                try:
+                    num = int(token.text)
+                    if num in [3, 5, 7]:
+                        forecast_days = num
+                        break
+                except Exception:
+                    continue
+    for ent in doc.ents:
+        if ent.label_ in ["LOC", "GPE"] and not location:
+            location = ent.text
+    if not location:
+        location = "Paris"
+    if not forecast_days:
+        forecast_days = 7
+    return location, forecast_days
     
     
 def get_coordinates_V2(city_name) -> Tuple[float, float]:
@@ -91,67 +134,7 @@ def get_coordinates_V2(city_name) -> Tuple[float, float]:
     return lat, lon
 
 
-def get_weather_forecast(city_name):
-    cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
-    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
-    openmeteo = openmeteo_requests.Client(session=retry_session)
-    if city_name == "":
-        return None
-    else:
-        lat, lon = get_coordinates_V2(city_name)
-
-    if lat is None or lon is None:
-        return None
-    else:
-        url = "https://api.open-meteo.com/v1/forecast"
-        params = {
-            "latitude": lat,
-            "longitude": lon,
-            "hourly": "temperature_2m,rain,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,is_day",
-            "timezone": "Europe/Paris",
-            "timezone_abbreviation": "CET"
-        }
-
-    responses = openmeteo.weather_api(url, params=params)
-
-    # Process first location. Add a for-loop for multiple locations or weather models
-    response = responses[0]
-    print(f"Coordinates {response.Latitude()}°N {response.Longitude()}°E")
-    print(f"Elevation {response.Elevation()} m asl")
-    print(f"Timezone {response.Timezone()} {response.TimezoneAbbreviation()}")
-    print(f"Timezone difference to GMT+0 {response.UtcOffsetSeconds()} s")
-
-    # Process hourly data. The order of variables needs to be the same as requested.
-    hourly = response.Hourly()
-    hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
-    hourly_rain = hourly.Variables(1).ValuesAsNumpy()
-    hourly_cloud_cover = hourly.Variables(2).ValuesAsNumpy()
-    hourly_cloud_cover_low = hourly.Variables(3).ValuesAsNumpy()
-    hourly_cloud_cover_mid = hourly.Variables(4).ValuesAsNumpy()
-    hourly_cloud_cover_high = hourly.Variables(5).ValuesAsNumpy()
-    hourly_wind_speed_10m = hourly.Variables(6).ValuesAsNumpy()
-    hourly_is_day = hourly.Variables(7).ValuesAsNumpy()
-
-    hourly_data = {"date": pd.date_range(
-        start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
-        end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
-        freq=pd.Timedelta(seconds=hourly.Interval()),
-        inclusive="left"
-    )}
-
-    hourly_data["temperature_2m"] = hourly_temperature_2m.tolist()
-    hourly_data["rain"] = hourly_rain.tolist()
-    hourly_data["cloud_cover"] = hourly_cloud_cover.tolist()
-    hourly_data["cloud_cover_low"] = hourly_cloud_cover_low.tolist()
-    hourly_data["cloud_cover_mid"] = hourly_cloud_cover_mid.tolist()
-    hourly_data["cloud_cover_high"] = hourly_cloud_cover_high.tolist()
-    hourly_data["wind_speed_10m"] = hourly_wind_speed_10m.tolist()
-    hourly_data["is_day"] = hourly_is_day.tolist()
-
-    hourly_dataframe = pd.DataFrame(data=hourly_data)
-    return hourly_dataframe
-
-def get_weather_forecast_seb(city_name: str) -> pd.DataFrame:
+def get_weather_forecast(city_name: str) -> pd.DataFrame:
     lat, lon = get_coordinates_V2(city_name)
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
@@ -166,11 +149,54 @@ def get_weather_forecast_seb(city_name: str) -> pd.DataFrame:
     df = pd.DataFrame({
         "date": times,
         "temperature_2m": data['hourly']['temperature_2m'],
+        #"rain": data['hourly']['rain'],
         "cloudcover": data['hourly']['cloudcover'],
         "windspeed_10m": data['hourly']['windspeed_10m'],
         "pm2_5": [12.3] * len(times)
     })
+    # Convertir les types de données en types natifs Python
+    df = df.astype({
+        "temperature_2m": float,
+        #"rain": float,
+        "cloudcover": float,
+        "windspeed_10m": float
+    })
     return df
+
+def store_forecast_in_db(transcription: str, location: str, forecast_days: int, forecast_df: pd.DataFrame, mode: str):
+    entry = {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "transcription": transcription,
+        "city": location,
+        "forecast_days": forecast_days,
+        "forecast": forecast_df.to_dict(orient="records"),
+        "mode": mode
+    }
+    logs.append(entry)
+    try:
+        import psycopg2
+        conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD, host=DB_HOST)
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS forecasts (
+                id SERIAL PRIMARY KEY,
+                timestamp TIMESTAMPTZ,
+                transcription TEXT,
+                city TEXT,
+                forecast_days INTEGER,
+                forecast JSONB,
+                mode TEXT
+            );
+        """)
+        cur.execute("""
+            INSERT INTO forecasts (timestamp, transcription, city, forecast_days, forecast, mode)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (entry["timestamp"], entry["transcription"], entry["city"], entry["forecast_days"], json.dumps(entry["forecast"]), entry["mode"]))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        logging.error(f"Erreur lors du stockage en base de données : {e}")
 
 
 def monitoring():

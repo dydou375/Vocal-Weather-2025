@@ -1,4 +1,6 @@
+import logging
 import os
+import time
 import azure.cognitiveservices.speech as speechsdk
 import dotenv
 import requests 
@@ -13,6 +15,9 @@ API_KEY = "b6cf1eceaa703e0b9f80b3f9453ff79a"
 WEATHER_URL = 'http://api.openweathermap.org/data/2.5/weather'
 WEATHER_URL_PREVISION = 'http://api.openweathermap.org/data/2.5/forecast'
 GEOCODING_URL = 'http://api.openweathermap.org/geo/1.0/direct?'
+
+SPEECH_KEY = "54124b94ae904eeea1d8a652a4c3d88d"
+SPEECH_REGION = "francecentral"
 
 def recognize_from_microphone():
     # This example requires environment variables named "SPEECH_KEY" and "SPEECH_REGION"
@@ -36,8 +41,71 @@ def recognize_from_microphone():
             print("Error details: {}".format(cancellation_details.error_details))
             print("Did you set the speech resource key and region values?")
             
+def recognize_from_microphone_V2():
+    # This example requires environment variables named "SPEECH_KEY" and "SPEECH_REGION"
+    speech_config = speechsdk.SpeechConfig(subscription=SPEECH_KEY, region=SPEECH_REGION)
+    speech_config.speech_recognition_language="fr-FR"
+
+    audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
+    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
+    time.sleep(3)
+
+    print("Speak into your microphone.")
+    retry_attempts = 3
+    for attempt in range(retry_attempts):
+        speech_recognition_result = speech_recognizer.recognize_once_async().get()
+        if speech_recognition_result.reason == speechsdk.ResultReason.RecognizedSpeech:
+            print("Recognized: {}".format(speech_recognition_result.text))
+            return speech_recognition_result.text
+        elif speech_recognition_result.reason == speechsdk.ResultReason.NoMatch:
+            print("No speech could be recognized: {}".format(speech_recognition_result.no_match_details))
+        elif speech_recognition_result.reason == speechsdk.ResultReason.Canceled:
+            cancellation_details = speech_recognition_result.cancellation_details
+            print("Speech Recognition canceled: {}".format(cancellation_details.reason))
+            if cancellation_details.reason == speechsdk.CancellationReason.Error:
+                print("Error details: {}".format(cancellation_details.error_details))
+                print("Did you set the speech resource key and region values?")
+            return None
+        else:
+            print(f"Erreur de reconnaissance vocale: {speech_recognition_result.reason}")
+            return None
+
+
+def speech_to_text():
+    SPEECH_KEY = "54124b94ae904eeea1d8a652a4c3d88d"
+    SPEECH_REGION = "francecentral"
+    if not SPEECH_KEY or not SPEECH_REGION:
+        logging.error("Les clés d'API Azure Speech ne sont pas configurées.")
+        return ""
+        
+    speech_config = speechsdk.SpeechConfig(subscription=SPEECH_KEY, region=SPEECH_REGION)
+    speech_config.speech_recognition_language = "fr-FR"
+    audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
+    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
+    print("Veuillez parler... (attendez la fin de l'enregistrement)")
+        
+    # Ajout d'un délai pour laisser le temps à la connexion de s'établir
+    time.sleep(3)
+        
+    retry_attempts = 3
+    for attempt in range(retry_attempts):
+        result = speech_recognizer.recognize_once_async().get()
+        if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+            return result.text
+        elif result.reason == speechsdk.ResultReason.Canceled:
+            details = result.cancellation_details
+            logging.error(f"Enregistrement annulé: {details.reason}. Détails: {details.error_details}")
+            if attempt < retry_attempts - 1:
+                logging.info(f"Nouvelle tentative... ({attempt + 1}/{retry_attempts})")
+                time.sleep(2)  # Attendre avant de réessayer
+            else:
+                return ""
+        else:
+            logging.error(f"Erreur de reconnaissance vocale: {result.reason}")
+            return ""
             
-recognize_from_microphone()
+
+recognize_from_microphone_V2()
 
 
 # Charger le modèle de langue française
