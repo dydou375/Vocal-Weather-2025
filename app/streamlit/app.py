@@ -67,7 +67,7 @@ def get_monitoring():
 #---------------------- Interface Streamlit V1 ---------------------------------
 
 st.title("Application de prévision météorologique (Open-Meteo)")
-mode = st.radio("Sélectionnez le mode de commande :", ("Enregistrement par micro", "Charger un fichier audio", "Manuelle"))
+mode = st.radio("Sélectionnez le mode de commande :", ("Enregistrement par micro", "Manuelle"))
 transcription_input = ""
 forecast_days_input = None
 audio_bytes = None
@@ -82,6 +82,7 @@ if mode != "Enregistrement par micro":
 if mode == "Enregistrement par micro":
     st.subheader("Commande vocale via microphone")
     if st.button("Enregistrer la commande vocale"):
+        st.info("Veuillez parler maintenant...")
         command_vocal = get_reconnaissance()
         if command_vocal == None:
             st.error("Aucune commande reconnue.")

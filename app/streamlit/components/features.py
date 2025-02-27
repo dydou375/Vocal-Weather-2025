@@ -198,6 +198,45 @@ def store_forecast_in_db(transcription: str, location: str, forecast_days: int, 
     except Exception as e:
         logging.error(f"Erreur lors du stockage en base de données : {e}")
 
-
 def monitoring():
-    return "Monitoring"
+    try:
+        import psycopg2
+        conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD, host=DB_HOST)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT timestamp, method, endpoint, http_status FROM request_logs
+            ORDER BY timestamp DESC
+        """)
+        logs = cur.fetchall()
+        cur.close()
+        conn.close()
+        return logs
+    except Exception as e:
+        logging.error(f"Erreur lors de la récupération des logs de monitoring : {e}")
+        return []
+
+def store_request_log(method: str, endpoint: str, http_status: int):
+    try:
+        import psycopg2
+        conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD, host=DB_HOST)
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS request_logs (
+                id SERIAL PRIMARY KEY,
+                timestamp TIMESTAMPTZ DEFAULT NOW(),
+                method TEXT,
+                endpoint TEXT,
+                http_status INTEGER
+            );
+        """)
+        cur.execute("""
+            INSERT INTO request_logs (method, endpoint, http_status)
+            VALUES (%s, %s, %s)
+        """, (method, endpoint, http_status))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        logging.error(f"Erreur lors du stockage du log de requête : {e}")
+
+
