@@ -4,6 +4,7 @@ import time
 from typing import Callable
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
+import uvicorn
 import features as features
 from prometheus_client import Counter, Histogram
 
