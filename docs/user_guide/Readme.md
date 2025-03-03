@@ -64,7 +64,12 @@ Lorsque vous ouvrez l'application, vous pouvez choisir entre deux modes de comma
 
 ### Affichage des résultats
 
-Les résultats des prévisions peuvent être affichés sous trois formes :
+Les résultats des prévisions peuvent être affichés sous trois formes dans un format Douze heures:
+- **Graphique** : Affiche les prévisions sous forme de graphiques interactifs.
+- **Tableau** : Affiche les prévisions sous forme de tableau.
+- **Texte** : Affiche les prévisions sous forme de texte détaillé.
+
+Les résultats des prévisions peuvent être affichés sous trois formes dans un format Horaire:
 - **Graphique** : Affiche les prévisions sous forme de graphiques interactifs.
 - **Tableau** : Affiche les prévisions sous forme de tableau.
 - **Texte** : Affiche les prévisions sous forme de texte détaillé.
@@ -75,7 +80,5 @@ Les résultats des prévisions peuvent être affichés sous trois formes :
 - **Ville introuvable** : Vérifiez l'orthographe de la ville et réessayez.
 
 ## Support
-
-Pour toute question ou problème, veuillez contacter notre support technique à support@open-meteo.com.
 
 Merci d'utiliser notre application de prévision météorologique !
