@@ -1,3 +1,4 @@
+import multiprocessing
 import threading
 import time
 import pandas as pd
@@ -6,13 +7,12 @@ import requests
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from dotenv import load_dotenv
-import uvicorn
-import subprocess
 
 
 
 #---------------------- Definition des fonctions FastAPI ---------------------------------
 #load_dotenv(r"Vocal_Weather\var.env")
+
 
 # Fonction pour obtenir la reconnaissance
 def get_reconnaissance():
@@ -74,6 +74,7 @@ def get_monitoring():
 
 st.title("Application de prévision météorologique (Open-Meteo)")
 mode = st.radio("Sélectionnez le mode de commande :", ("Enregistrement par micro", "Manuelle"))
+
 transcription_input = ""
 forecast_days_input = None
 audio_bytes = None
@@ -112,9 +113,10 @@ else:
         if meteo_data:
             st.session_state.forecast_response = meteo_data
             st.success(f"Prévision pour {city_input}")
-            
+        
+#---------------------------------- Affichage des résultats (12 heures) ---------------------------------
 if st.session_state.forecast_response:
-    tab1, tab2, tab3 = st.tabs(["afficher les résultats sous forme de graphique", "afficher les résultats sous forme de tableau", "afficher les résultats sous forme de texte"])
+    tab1, tab2, tab3, tab4 = st.tabs(["afficher les résultats sous forme de graphique", "afficher les résultats sous forme de tableau", "afficher les résultats sous forme de texte", "afficher les résultats par heure"])
 
     with tab1:
         if st.session_state.forecast_response:
@@ -130,7 +132,7 @@ if st.session_state.forecast_response:
             df_filtered = df_meteo[df_meteo['date'].dt.hour == 12].sort_values(by='date').head(forecast_days_input)
 
             fig = make_subplots(rows=2, cols=2, shared_xaxes=True, vertical_spacing=0.08,
-                                subplot_titles=("Température (°C)", "Précipitations (mm)", "Nébulosité (%)", "Vent (km/h)"))
+                                subplot_titles=(f"Température (°C)", f"Précipitations (mm)", f"Nébulosité (%)", f"Vent (km/h)"))
             fig.add_trace(go.Scatter(x=df_filtered['date'], y=df_filtered['temperature_2m'],
                                      mode='lines+markers', marker=dict(color='red')), row=1, col=1)
             fig.add_trace(go.Scatter(x=df_filtered['date'], y=df_filtered['precipitation'],
@@ -161,9 +163,41 @@ if st.session_state.forecast_response:
         # Assurez-vous que meteo_data est défini
         meteo_data = st.session_state.forecast_response
         
+        # Convertir meteo_data en DataFrame
+        df_meteo = pd.DataFrame(meteo_data)
+        df_meteo['date'] = pd.to_datetime(df_meteo['date'])
+        
+        # Filtrer les données pour ne garder que les enregistrements de midi
+        df_filtered = df_meteo[df_meteo['date'].dt.hour == 12]
+        
+        # Afficher toutes les prévisions
+        for index, row in df_filtered.iterrows():
+            date = row['date'].strftime('%Y-%m-%d')
+            temperature = row['temperature_2m']
+            precipitation = row['precipitation']
+            cloudcover = row['cloudcover']
+            windspeed = row['windspeed_10m']
+            pm2_5 = row['pm2_5']
+            
+            # Déterminer les icônes
+            weather_icon = "☁️" if cloudcover > 75 else "🌥️" if cloudcover > 50 else "⛅" if cloudcover > 25 else "☀️"
+            precipitation_icon = "🌧️" if precipitation > 20 else "🌦️" if precipitation > 5 else "🌂" if precipitation > 0 else "☂️"
+            wind_icon = "💨" if windspeed > 50 else "🌬️" if windspeed > 20 else "🍃"
+            pollution_icon = "🌫️" if pm2_5 > 50 else "🌫️" if pm2_5 > 20 else "🌳"
+            temperature_icon = "🔥" if temperature > 30 else "🌞" if temperature > 20 else "🌤️"
+
+            # Afficher les informations avec les icônes
+            st.write(f"**{date}**")
+            st.write(f"Température : {temperature}°C {temperature_icon}")
+            st.write(f"Précipitations : {precipitation} mm {precipitation_icon}")
+            st.write(f"Nébulosité : {cloudcover}% {weather_icon}")
+            st.write(f"Vent : {windspeed} km/h {wind_icon}")
+            st.write(f"Pollution : {pm2_5} µg/m³ {pollution_icon}")
+            st.write("---")
+
         # Ajout d'un sélecteur de date
         dates = df_filtered['date'].dt.strftime('%Y-%m-%d').unique()
-        selected_date = st.radio("Sélectionnez une date pour afficher les prévisions :", dates)
+        selected_date = st.radio("Sélectionnez une date pour afficher les prévisions détaillées :", dates)
 
         # Filtrer les données pour la date sélectionnée
         selected_data = df_filtered[df_filtered['date'].dt.strftime('%Y-%m-%d') == selected_date]
@@ -178,54 +212,61 @@ if st.session_state.forecast_response:
             windspeed = row['windspeed_10m']
             pm2_5 = row['pm2_5']
             
-            # Déterminer l'icône en fonction de la nébulosité
-            if cloudcover > 75:
-                weather_icon = "☁️"  # Très nuageux
-            elif cloudcover > 50:
-                weather_icon = "🌥️"  # Partiellement nuageux
-            elif cloudcover > 25:
-                weather_icon = "⛅"  # Peu nuageux
-            else:
-                weather_icon = "☀️"  # Ensoleillé
-
-            # Déterminer l'icône en fonction des précipitations
-            if precipitation > 20:
-                precipitation_icon = "🌧️"  # Pluie forte
-            elif precipitation > 5:
-                precipitation_icon = "🌦️"  # Pluie modérée
-            elif precipitation > 0:
-                precipitation_icon = "🌂"  # Pluie légère
-            else:
-                precipitation_icon = "☂️"  # Pas de pluie
-
-            # Déterminer l'icône en fonction de la vitesse du vent
-            if windspeed > 50:
-                wind_icon = "💨"  # Vent fort
-            elif windspeed > 20:
-                wind_icon = "🌬️"  # Vent modéré
-            else:
-                wind_icon = "🍃"  # Vent léger
-                
-            # Déterminer l'icône en fonction de la pollution
-            if pm2_5 > 50:
-                pollution_icon = "🌫️"  # Pollution forte
-            elif pm2_5 > 20:
-                pollution_icon = "🌫️"  # Pollution modérée
-            else:
-                pollution_icon = "🌳"  # Pollution légère
-                
-            # Déterminer l'icône en fonction de la température
-            if temperature > 30:
-                temperature_icon = "🔥"  # Température élevée
-            elif temperature > 20:
-                temperature_icon = "🌞"  # Température modérée
-            else:
-                temperature_icon = "🌤️"  # Température basse
-
-            # Afficher les informations avec les icônes
-            st.write(f"**{date}**")
+            # Afficher les informations détaillées avec les icônes
+            st.write(f"**Détails pour {date}**")
             st.write(f"Température : {temperature}°C {temperature_icon}")
-            st.write(f"Précipitations : {precipitation} mm  {precipitation_icon}")
+            st.write(f"Précipitations : {precipitation} mm {precipitation_icon}")
             st.write(f"Nébulosité : {cloudcover}% {weather_icon}")
-            st.write(f"Vent : {windspeed} km/h  {wind_icon}")
+            st.write(f"Vent : {windspeed} km/h {wind_icon}")
             st.write(f"Pollution : {pm2_5} µg/m³ {pollution_icon}")
+
+#---------------------------------- Affichage des résultats (par heure) ---------------------------------
+    with tab4:
+        if st.session_state.forecast_response:
+            # Assurez-vous que meteo_data est défini
+            meteo_data = st.session_state.forecast_response
+
+            # Convertir meteo_data en DataFrame
+            df_meteo = pd.DataFrame(meteo_data)
+
+            # Convertir la colonne 'date' en type datetime
+            df_meteo['date'] = pd.to_datetime(df_meteo['date'])
+
+            # Filtrer les données pour toutes les heures disponibles
+            df_filtered = df_meteo.sort_values(by='date').head(forecast_days_input * 24)  # Supposant 24 heures par jour
+
+            # Ajout d'un sélecteur d'heure
+            available_hours = df_filtered['date'].dt.strftime('%Y-%m-%d %H:%M').unique()
+            selected_hour = st.selectbox("Sélectionnez une heure pour afficher les prévisions :", available_hours)
+
+            # Filtrer les données pour l'heure sélectionnée
+            selected_data = df_filtered[df_filtered['date'].dt.strftime('%Y-%m-%d %H:%M') == selected_hour]
+
+            # Afficher les informations pour l'heure sélectionnée
+            if not selected_data.empty:
+                row = selected_data.iloc[0]
+                temperature = row['temperature_2m']
+                precipitation = row['precipitation']
+                cloudcover = row['cloudcover']
+                windspeed = row['windspeed_10m']
+                pm2_5 = row['pm2_5']
+
+                st.write(f"**{selected_hour}**")
+                st.write(f"Température : {temperature}°C {temperature_icon}")
+                st.write(f"Précipitations : {precipitation} mm {precipitation_icon}")
+                st.write(f"Nébulosité : {cloudcover}% {weather_icon}")
+                st.write(f"Vent : {windspeed} km/h {wind_icon}")
+                st.write(f"Pollution : {pm2_5} µg/m³ {pollution_icon}")
+
+            fig = make_subplots(rows=2, cols=2, shared_xaxes=True, vertical_spacing=0.08,
+                                subplot_titles=(f"Température (°C) {temperature_icon}", f"Précipitations (mm) {precipitation_icon}", f"Nébulosité (%) {weather_icon}", f"Vent (km/h) {wind_icon}"))
+            fig.add_trace(go.Scatter(x=df_filtered['date'], y=df_filtered['temperature_2m'],
+                                     mode='lines+markers', marker=dict(color='red')), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df_filtered['date'], y=df_filtered['precipitation'],
+                                     mode='lines+markers', marker=dict(color='blue')), row=1, col=2)
+            fig.add_trace(go.Scatter(x=df_filtered['date'], y=df_filtered['cloudcover'],
+                                     mode='lines+markers', marker=dict(color='blue')), row=2, col=1)
+            fig.add_trace(go.Scatter(x=df_filtered['date'], y=df_filtered['windspeed_10m'],
+                                     mode='lines+markers', marker=dict(color='green')), row=2, col=2)
+            fig.update_layout(height=800, title=f"Prévisions horaires sur {forecast_days_input} jours", showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
