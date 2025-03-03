@@ -1,4 +1,5 @@
 import multiprocessing
+import os
 import threading
 import time
 import pandas as pd
@@ -12,6 +13,10 @@ from dotenv import load_dotenv
 
 #---------------------- Definition des fonctions FastAPI ---------------------------------
 #load_dotenv(r"Vocal_Weather\var.env")
+
+# Lancer l'application FastAPI
+# uvicorn app.main:app --reload
+
 
 
 # Fonction pour obtenir la reconnaissance
@@ -119,6 +124,7 @@ if st.session_state.forecast_response:
     tab1, tab2, tab3, tab4 = st.tabs(["afficher les résultats sous forme de graphique", "afficher les résultats sous forme de tableau", "afficher les résultats sous forme de texte", "afficher les résultats par heure"])
 
     with tab1:
+        st.subheader("Prévisions de la journée")
         if st.session_state.forecast_response:
             # Assurez-vous que meteo_data est défini
             meteo_data = st.session_state.forecast_response
