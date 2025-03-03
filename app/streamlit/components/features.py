@@ -140,16 +140,22 @@ def get_weather_forecast(city_name: str) -> pd.DataFrame:
     params = {
         "latitude": lat,
         "longitude": lon,
-        "hourly": "temperature_2m,cloudcover,windspeed_10m",
+        "hourly": "temperature_2m,rain,precipitation,cloudcover,windspeed_10m",
         "timezone": "auto"
     }
     response = retry_session.get(url, params=params)
     data = response.json()
+    
+    # Vérification des données reçues
+    if 'hourly' not in data or not all(key in data['hourly'] for key in ['time', 'temperature_2m', 'precipitation', 'cloudcover', 'windspeed_10m']):
+        raise ValueError("Données manquantes dans la réponse de l'API")
+    
     times = pd.to_datetime(data['hourly']['time'])
     df = pd.DataFrame({
         "date": times,
         "temperature_2m": data['hourly']['temperature_2m'],
-        #"rain": data['hourly']['rain'],
+        "rain": data['hourly']['rain'],
+        "precipitation": data['hourly']['precipitation'],
         "cloudcover": data['hourly']['cloudcover'],
         "windspeed_10m": data['hourly']['windspeed_10m'],
         "pm2_5": [12.3] * len(times)
@@ -157,7 +163,8 @@ def get_weather_forecast(city_name: str) -> pd.DataFrame:
     # Convertir les types de données en types natifs Python
     df = df.astype({
         "temperature_2m": float,
-        #"rain": float,
+        "rain": float,
+        "precipitation": float,
         "cloudcover": float,
         "windspeed_10m": float
     })
@@ -238,5 +245,32 @@ def store_request_log(method: str, endpoint: str, http_status: int):
         conn.close()
     except Exception as e:
         logging.error(f"Erreur lors du stockage du log de requête : {e}")
+        
+def store_forecast_in_db(transcription: str, city: str, forecast_days: int, forecast: pd.DataFrame, mode: str):
+    try:
+        import psycopg2
+        conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD, host=DB_HOST)
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS forecasts (
+                id SERIAL PRIMARY KEY,
+                timestamp TIMESTAMPTZ DEFAULT NOW(),
+                transcription TEXT,
+                city TEXT,
+                forecast_days INTEGER,
+                forecast JSONB,
+                mode TEXT
+            );
+        """)
+        cur.execute("""
+            INSERT INTO forecasts (transcription, city, forecast_days, forecast, mode)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (transcription, city, forecast_days, forecast.to_json(orient="records"), mode))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        logging.error(f"Erreur lors du stockage en base de données : {e}")
+
 
 
