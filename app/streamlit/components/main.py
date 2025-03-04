@@ -47,6 +47,22 @@ def meteo(city_name: str, transcription: str = "", mode: str = "manual"):
         features.store_forecast_in_db(transcription, city_name, len(forecast_df), forecast_df, mode)
     return forecast_df
 
+@app.get("/meteo_prevision_horaire")
+def meteo_horaire(city_name: str, transcription: str = "", mode: str = "manual"):
+    forecast_df = features.get_hourly_weather_forecast(city_name)
+    if forecast_df is not None:
+        features.store_forecast_in_db(transcription, city_name, len(forecast_df), forecast_df, mode)
+    return forecast_df
+
+@app.get("/meteo_prevision_journaliere")
+def meteo_journaliere(city_name: str, transcription: str = "", mode: str = "manual"):
+    forecast_df = features.get_daily_weather_forecast(city_name)
+    if forecast_df is not None:
+        features.store_forecast_in_db(transcription, city_name, len(forecast_df), forecast_df, mode)
+    return forecast_df
+
+
+
 #---------------------------------- Monitoring ----------------------------------
 @app.get("/monitoring")
 def monitoring():

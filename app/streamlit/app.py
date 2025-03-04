@@ -67,6 +67,17 @@ def get_weather_forecast(city_name):
         st.error("Erreur de décodage JSON : la réponse n'est pas valide ou est vide.")
         return None
     
+def get_daily_weather_forecast(city_name):
+    res = requests.get("http://localhost:8000/meteo_prevision_journaliere", params={"city_name": city_name})
+    if res.status_code != 200:
+        st.error(f"Erreur lors de la requête : {res.status_code}")
+        return None
+    try:
+        return res.json()
+    except requests.exceptions.JSONDecodeError:
+        st.error("Erreur de décodage JSON : la réponse n'est pas valide ou est vide.")
+        return None
+    
 # Fonction pour obtenir les données de monitoring
 def get_monitoring():
     res = requests.get("http://localhost:8000/monitoring", params={})
@@ -115,40 +126,80 @@ else:
     city_input = st.text_input("Ville")
     if st.button("Envoyer la commande"):
         meteo_data = get_weather_forecast(city_input)
+        meteo_data_journaliere = get_daily_weather_forecast(city_input)
         if meteo_data:
             st.session_state.forecast_response = meteo_data
+            st.session_state.forecast_response_journaliere = meteo_data_journaliere
             st.success(f"Prévision pour {city_input}")
         
 #---------------------------------- Affichage des résultats (12 heures) ---------------------------------
 if st.session_state.forecast_response:
     tab1, tab2, tab3, tab4 = st.tabs(["afficher les résultats sous forme de graphique", "afficher les résultats sous forme de tableau", "afficher les résultats sous forme de texte", "afficher les résultats par heure"])
+    meteo_data = st.session_state.forecast_response
+    # Convertir meteo_data en DataFrame
+    df_meteo = pd.DataFrame(meteo_data)
 
+    # Convertir la colonne 'date' en type datetime
+    df_meteo['date'] = pd.to_datetime(df_meteo['date'])
+
+    df_filtered = df_meteo[df_meteo['date'].dt.hour == 12].sort_values(by='date').head(forecast_days_input)
+    
     with tab1:
         st.subheader("Prévisions de la journée")
-        if st.session_state.forecast_response:
+        if st.session_state.forecast_response_journaliere and st.session_state.forecast_response:
+            #---------------------------------- Prévisions de la journée ---------------------------------
+            jour_selectionne = st.radio("Sélectionnez la journée si vous voulez afficher les prévisions de la journée:",options=["Données générales","Données détaillées"])
             # Assurez-vous que meteo_data est défini
-            meteo_data = st.session_state.forecast_response
+            if jour_selectionne == "Données générales":
+                meteo_data_journaliere = st.session_state.forecast_response_journaliere
+                df_meteo_journaliere = pd.DataFrame(meteo_data_journaliere)
+                df_meteo_journaliere['date'] = pd.to_datetime(df_meteo_journaliere['date'])
+                
+                # Obtenir toutes les dates disponibles
+                available_dates = df_meteo_journaliere['date'].dt.strftime('%Y-%m-%d').unique()
+                
+                # Sélecteur de dates multiples
+                selected_dates = st.multiselect("Sélectionnez les dates à afficher :", available_dates, default=available_dates)
+                
+                # Filtrer les données pour les dates sélectionnées
+                df_selected = df_meteo_journaliere[df_meteo_journaliere['date'].dt.strftime('%Y-%m-%d').isin(selected_dates)]
+                
+                for index, row in df_selected.iterrows():
+                    date = row['date'].strftime('%Y-%m-%d')
+                    temperature_min = row['temperature_min']
+                    temperature_max = row['temperature_max']
+                    sunrise = row['sunrise']
+                    sunset = row['sunset']
+                    windspeed_max = row['windspeed_10m_max']
+                    windspeed_min = row['windspeed_10m_min']
+                    
+                    # Utilisation d'icônes génériques
+                    temperature_icon = "🌡️"
+                    wind_icon = "💨"
+                    sunrise_icon = "🌅"
+                    sunset_icon = "🌇"
 
-            # Convertir meteo_data en DataFrame
-            df_meteo = pd.DataFrame(meteo_data)
-
-            # Convertir la colonne 'date' en type datetime
-            df_meteo['date'] = pd.to_datetime(df_meteo['date'])
-
-            df_filtered = df_meteo[df_meteo['date'].dt.hour == 12].sort_values(by='date').head(forecast_days_input)
-
-            fig = make_subplots(rows=2, cols=2, shared_xaxes=True, vertical_spacing=0.08,
-                                subplot_titles=(f"Température (°C)", f"Précipitations (mm)", f"Nébulosité (%)", f"Vent (km/h)"))
-            fig.add_trace(go.Scatter(x=df_filtered['date'], y=df_filtered['temperature_2m'],
-                                     mode='lines+markers', marker=dict(color='red')), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df_filtered['date'], y=df_filtered['precipitation'],
-                                     mode='lines+markers', marker=dict(color='blue')), row=1, col=2)
-            fig.add_trace(go.Scatter(x=df_filtered['date'], y=df_filtered['cloudcover'],
-                                     mode='lines+markers', marker=dict(color='blue')), row=2, col=1)
-            fig.add_trace(go.Scatter(x=df_filtered['date'], y=df_filtered['windspeed_10m'],
-                                     mode='lines+markers', marker=dict(color='green')), row=2, col=2)
-            fig.update_layout(height=600, title=f"Prévisions de Midi sur {forecast_days_input} jours", showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
+                    # Afficher les informations avec les icônes
+                    st.write(f"**{date}**")
+                    st.write(f"Température min: {temperature_min}°C {temperature_icon} Température max: {temperature_max}°C {temperature_icon}")
+                    st.write(f"Vent max: {windspeed_max} km/h {wind_icon} Vent min: {windspeed_min} km/h {wind_icon}")
+                    st.write(f"Lever de soleil: {sunrise} {sunrise_icon} Coucher de soleil: {sunset} {sunset_icon}")
+                    st.write("---")
+            
+            #---------------------------------- Prévision de la journée with hourly ---------------------------------
+            if jour_selectionne == "Données détaillées":
+                fig = make_subplots(rows=2, cols=2, shared_xaxes=True, vertical_spacing=0.08,
+                                    subplot_titles=(f"Température (°C)", f"Précipitations (mm)", f"Nébulosité (%)", f"Vent (km/h)"))
+                fig.add_trace(go.Scatter(x=df_filtered['date'], y=df_filtered['temperature_2m'],
+                                        mode='lines+markers', marker=dict(color='red')), row=1, col=1)
+                fig.add_trace(go.Scatter(x=df_filtered['date'], y=df_filtered['precipitation'],
+                                        mode='lines+markers', marker=dict(color='blue')), row=1, col=2)
+                fig.add_trace(go.Scatter(x=df_filtered['date'], y=df_filtered['cloudcover'],
+                                        mode='lines+markers', marker=dict(color='blue')), row=2, col=1)
+                fig.add_trace(go.Scatter(x=df_filtered['date'], y=df_filtered['windspeed_10m'],
+                                        mode='lines+markers', marker=dict(color='green')), row=2, col=2)
+                fig.update_layout(height=600, title=f"Prévisions de Midi sur {forecast_days_input} jours", showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
 
     with tab2:
         st.subheader("Détails des prévisions")
