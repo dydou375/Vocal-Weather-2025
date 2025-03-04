@@ -8,6 +8,7 @@ import requests
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from dotenv import load_dotenv
+import datetime
 
 
 
@@ -19,7 +20,7 @@ from dotenv import load_dotenv
 
 
 
-# Fonction pour obtenir la reconnaissance
+#---------------------------------- Fonction pour obtenir la reconnaissance ----------------------------------
 def get_reconnaissance():
     res = requests.get("http://localhost:8000/reconnaissance", params={})
     try:
@@ -28,32 +29,32 @@ def get_reconnaissance():
         st.error("Erreur lors de la décodage de la réponse JSON. La réponse de l'API est vide ou mal formée.")
         return None
 
-# Fonction pour extraire les entités
+#---------------------------------- Fonction pour extraire les entités ----------------------------------
 def extract_entities(text):
     res = requests.get("http://localhost:8000/extraction_entites", params={"text": text})
     return res.json()
 
-# # Fonction pour extraire les entités ville
-# def extract_entities_ville(text):
-#     res = requests.get("http://localhost:8000/extraction_entites_ville", params={"text": text})
+#---------------------------------- Fonction pour extraire les entités ville ----------------------------------
+def extract_entities_ville(text):
+    res = requests.get("http://localhost:8000/extraction_entites_ville", params={"text": text})
     
-#     # Vérification de la validité de la réponse
-#     if res.status_code != 200:
-#         st.error(f"Erreur lors de la requête : {res.status_code}")
-#         return None
+    # Vérification de la validité de la réponse
+    if res.status_code != 200:
+        st.error(f"Erreur lors de la requête : {res.status_code}")
+        return None
     
-#     try:
-#         return res.json()
-#     except requests.exceptions.JSONDecodeError:
-#         st.error("Erreur de décodage JSON : la réponse n'est pas valide ou est vide.")
-#         return None
+    try:
+        return res.json()
+    except requests.exceptions.JSONDecodeError:
+        st.error("Erreur de décodage JSON : la réponse n'est pas valide ou est vide.")
+        return None
 
-# # Fonction pour extraire les entités jours
-# def extract_entities_jours(text):
-#     res = requests.get("http://localhost:8000/extraction_entites_jours", params={"text": text})
-#     return res.json()
+# Fonction pour extraire les entités jours
+def extract_entities_jours(text):
+    res = requests.get("http://localhost:8000/extraction_entites_jours", params={"text": text})
+    return res.json()
 
-# Fonction pour obtenir les prévisions météorologiques
+#---------------------------------- Fonction pour obtenir les prévisions météorologiques ----------------------------------
 def get_weather_forecast(city_name):
     res = requests.get("http://localhost:8000/meteo_prevision", params={"city_name": city_name})
     
@@ -77,19 +78,11 @@ def get_daily_weather_forecast(city_name):
     except requests.exceptions.JSONDecodeError:
         st.error("Erreur de décodage JSON : la réponse n'est pas valide ou est vide.")
         return None
-    
-# Fonction pour obtenir les données de monitoring
-def get_monitoring():
-    res = requests.get("http://localhost:8000/monitoring", params={})
-    return res.json()  
-
-
-
 
 #---------------------- Interface Streamlit V1 ---------------------------------
 
 st.title("Application de prévision météorologique (Open-Meteo)")
-mode = st.radio("Sélectionnez le mode de commande :", ("Enregistrement par micro", "Manuelle"))
+mode = st.radio("Sélectionnez le mode de commande :", ("Enregistrement par micro", "text", "Manuelle"))
 
 transcription_input = ""
 forecast_days_input = None
@@ -100,8 +93,10 @@ if "forecast_response" not in st.session_state:
 
 
 if mode != "Enregistrement par micro":
-    forecast_days_input = st.selectbox("Nombre de jours de prévision", options=[3, 5, 7], index=2)
-    
+    forecast_days_input = st.selectbox("Nombre de jours de prévision", options=[1,2,3,4,5,6,7], index=2)
+else:
+    forecast_days_input = 7
+
 if mode == "Enregistrement par micro":
     st.subheader("Commande vocale via microphone")
     if st.button("Enregistrer la commande vocale"):
@@ -116,12 +111,14 @@ if mode == "Enregistrement par micro":
         city_input = extract_entities(st.session_state.micro_transcription)
         if st.button("Envoyer la commande vocale"):
             meteo_data = get_weather_forecast(city_input)
+            meteo_data_journaliere = get_daily_weather_forecast(city_input)
             if meteo_data:
                 st.session_state.forecast_response = meteo_data
+                st.session_state.forecast_response_journaliere = meteo_data_journaliere
                 st.success(f"Prévision pour {city_input}")
             else:
                 st.error("Erreur lors de la récupération des données météorologiques.")
-else:
+elif mode == "Manuelle":
     st.subheader("Commande manuelle")
     city_input = st.text_input("Ville")
     if st.button("Envoyer la commande"):
@@ -131,6 +128,19 @@ else:
             st.session_state.forecast_response = meteo_data
             st.session_state.forecast_response_journaliere = meteo_data_journaliere
             st.success(f"Prévision pour {city_input}")
+else:
+    text = st.text_area("Veuillez ecrire ce que vous souhaitez faire")
+    ville = extract_entities_ville(text)
+    jours = extract_entities_jours(text)
+    st.write(f"Ville: {ville}")
+    st.write(f"Jours: {jours}")
+    if st.button("Envoyer la commande"):
+        meteo_data = get_weather_forecast(ville)
+        meteo_data_journaliere = get_daily_weather_forecast(ville)
+        if meteo_data:
+            st.session_state.forecast_response = meteo_data
+            st.session_state.forecast_response_journaliere = meteo_data_journaliere
+            st.success(f"Prévision pour {ville} pour {jours} jours")
         
 #---------------------------------- Affichage des résultats (12 heures) ---------------------------------
 if st.session_state.forecast_response:
@@ -168,8 +178,8 @@ if st.session_state.forecast_response:
                     date = row['date'].strftime('%Y-%m-%d')
                     temperature_min = row['temperature_min']
                     temperature_max = row['temperature_max']
-                    sunrise = row['sunrise']
-                    sunset = row['sunset']
+                    sunrise = datetime.datetime.strptime(row['sunrise'], '%Y-%m-%dT%H:%M').strftime('%H:%M')
+                    sunset = datetime.datetime.strptime(row['sunset'], '%Y-%m-%dT%H:%M').strftime('%H:%M')
                     windspeed_max = row['windspeed_10m_max']
                     windspeed_min = row['windspeed_10m_min']
                     
@@ -181,9 +191,9 @@ if st.session_state.forecast_response:
 
                     # Afficher les informations avec les icônes
                     st.write(f"**{date}**")
-                    st.write(f"Température min: {temperature_min}°C {temperature_icon} Température max: {temperature_max}°C {temperature_icon}")
-                    st.write(f"Vent max: {windspeed_max} km/h {wind_icon} Vent min: {windspeed_min} km/h {wind_icon}")
-                    st.write(f"Lever de soleil: {sunrise} {sunrise_icon} Coucher de soleil: {sunset} {sunset_icon}")
+                    st.write(f" {temperature_icon}Température min: {temperature_min}°C,  {temperature_icon} Température max: {temperature_max}°C")
+                    st.write(f" {wind_icon}Vent min: {windspeed_min} km/h, {wind_icon} Vent max: {windspeed_max} km/h ")
+                    st.write(f" {sunrise_icon}Lever de soleil: {sunrise}, {sunset_icon} Coucher de soleil: {sunset}")
                     st.write("---")
             
             #---------------------------------- Prévision de la journée with hourly ---------------------------------

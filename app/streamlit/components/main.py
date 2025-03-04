@@ -29,33 +29,34 @@ def reconnaissance():
 def extraction_entites(text):
     return features.spacy_analyze(text)
 
-# #---------------------------------- Ville (Extraction Entités)  ----------------------------------
-# @app.get("/ville")
-# def ville(text):
-#     return features.extract_entities_ville(text)
+#--------- Extraction Entités Ville ---------
+@app.get("/extraction_entites_ville")
+def extraction_entites_ville(text):
+    return features.extract_entities_ville(text)
 
-# #---------------------------------- Ville (Coordonnées)  ----------------------------------
-# @app.get("/ville_coordonnees")
-# def ville_coordonnees(ville):
-#     return features.get_coordinates(ville)
+#--------- Extraction Entités Jours ---------
+@app.get("/extraction_entites_jours")
+def extraction_entites_jours(text):
+    return features.extract_forecast_days(text)
+
 
 #---------------------------------- Météo ----------------------------------
 @app.get("/meteo_prevision")
-def meteo(city_name: str, transcription: str = "", mode: str = "manual"):
+def meteo(city_name: str, transcription: str = "", mode: str = ""):
     forecast_df = features.get_weather_forecast(city_name)
     if forecast_df is not None:
         features.store_forecast_in_db(transcription, city_name, len(forecast_df), forecast_df, mode)
     return forecast_df
 
 @app.get("/meteo_prevision_horaire")
-def meteo_horaire(city_name: str, transcription: str = "", mode: str = "manual"):
+def meteo_horaire(city_name: str, transcription: str = "", mode: str = ""):
     forecast_df = features.get_hourly_weather_forecast(city_name)
     if forecast_df is not None:
         features.store_forecast_in_db(transcription, city_name, len(forecast_df), forecast_df, mode)
     return forecast_df
 
 @app.get("/meteo_prevision_journaliere")
-def meteo_journaliere(city_name: str, transcription: str = "", mode: str = "manual"):
+def meteo_journaliere(city_name: str, transcription: str = "", mode: str = ""):
     forecast_df = features.get_daily_weather_forecast(city_name)
     if forecast_df is not None:
         features.store_forecast_in_db(transcription, city_name, len(forecast_df), forecast_df, mode)
