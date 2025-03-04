@@ -27,14 +27,14 @@ from plotly.subplots import make_subplots
 
 import openmeteo_requests
 
-# Configuration PostgreSQL (Azure)
-DB_USER = os.getenv("DB_USER", "dylan")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "GRETAP4!2025***")
-DB_HOST = os.getenv("DB_HOST", "vw-dylan.postgres.database.azure.com")
-DB_NAME = os.getenv("DB_NAME", "postgres")
+dotenv.load_dotenv()
 
-#Chargement des variables d'environnement
-dotenv.load_dotenv(r"Vocal_Weather\var.env")
+# Configuration PostgreSQL (Azure)
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_HOST = os.getenv("DB_HOST")
+DB_NAME = os.getenv("DB_NAME")
+
 
 #Configuration du logging
 logging.basicConfig(level=logging.INFO)
@@ -49,7 +49,7 @@ openmeteo = openmeteo_requests.Client(session=retry_session)
 SPEECH_KEY = "54124b94ae904eeea1d8a652a4c3d88d"
 SPEECH_REGION = "francecentral"
 
-
+#---------------------------------- Reconnaissance vocale ----------------------------------
 def recognize_from_microphone():
     # This example requires environment variables named "SPEECH_KEY" and "SPEECH_REGION"
     speech_config = speechsdk.SpeechConfig(subscription=SPEECH_KEY, region=SPEECH_REGION)
@@ -88,6 +88,29 @@ def extract_entities_ville(text):
         location = "Paris"
     return location
 
+#---------------------------------- Extraction des entités ----------------------------------
+def extract_forecast_days(text: str) -> int:
+    regex_match = re.search(r"sur\s+(\d+)\s+jours", text, re.IGNORECASE)
+    if regex_match:
+        try:
+            num = int(regex_match.group(1))
+            if num in [3, 5, 7]:
+                return num
+        except Exception as e:
+            logging.error(f"Erreur extraction jours: {e}")
+    
+    doc = nlp(text)
+    for token in doc:
+        if token.like_num:
+            try:
+                num = int(token.text)
+                if num in [1, 2, 3, 4, 5, 6, 7]:
+                    return num
+            except Exception:
+                continue
+    
+    return 7  # Valeur par défaut
+
 def spacy_analyze(text: str) -> Tuple[str, int]:
     doc = nlp(text)
     location = None
@@ -105,7 +128,7 @@ def spacy_analyze(text: str) -> Tuple[str, int]:
             if token.like_num:
                 try:
                     num = int(token.text)
-                    if num in [3, 5, 7]:
+                    if num in [1,2,3,4,5,6,7]:
                         forecast_days = num
                         break
                 except Exception:
@@ -119,7 +142,7 @@ def spacy_analyze(text: str) -> Tuple[str, int]:
         forecast_days = 7
     return location, forecast_days
     
-    
+#---------------------------------- Coordonnées des villes ----------------------------------
 def get_coordinates_V2(city_name) -> Tuple[float, float]:
     geocode_url = "https://nominatim.openstreetmap.org/search"
     params = {"q": city_name, "format": "json"}
@@ -133,6 +156,7 @@ def get_coordinates_V2(city_name) -> Tuple[float, float]:
     lon = float(data[0]["lon"])
     return lat, lon
 
+#---------------------------------- Prévision météorologique ----------------------------------
 def get_weather_forecast(city_name: str) -> pd.DataFrame:
     lat, lon = get_coordinates_V2(city_name)
     url = "https://api.open-meteo.com/v1/forecast"
@@ -240,6 +264,7 @@ def get_daily_weather_forecast(city_name: str) -> pd.DataFrame:
     
     raise ValueError("Données quotidiennes manquantes dans la réponse de l'API")
 
+#---------------------------------- Stockage des données dans la base de données ----------------------------------
 def store_forecast_in_db(transcription: str, location: str, forecast_days: int, forecast_df: pd.DataFrame, mode: str):
     entry = {
         "timestamp": datetime.datetime.now().isoformat(),
@@ -275,6 +300,7 @@ def store_forecast_in_db(transcription: str, location: str, forecast_days: int, 
     except Exception as e:
         logging.error(f"Erreur lors du stockage en base de données : {e}")
 
+#---------------------------------- Monitoring ----------------------------------
 def monitoring():
     try:
         import psycopg2
@@ -292,6 +318,7 @@ def monitoring():
         logging.error(f"Erreur lors de la récupération des logs de monitoring : {e}")
         return []
 
+#---------------------------------- Stockage des logs de requête ----------------------------------
 def store_request_log(method: str, endpoint: str, http_status: int):
     try:
         import psycopg2
