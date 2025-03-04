@@ -75,18 +75,6 @@ pip install -r requirements.txt
 
 </details>
 
-## 🎮 Démarrage rapide
-
-Pour commencer, suivez ces étapes simples :
-
-```python
-from project_name import example
-
-# Exemple de base
-result = example.do_something()
-print(result)
-```
-
 ## 📚 Documentation
 
 Pour plus d'informations sur l'utilisation de ce projet, veuillez consulter notre [Documentation](docs/).
@@ -113,48 +101,12 @@ Voulez-vous contribuer ? C'est parfait ! Voici comment :
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Ouvrir une Pull Request
 
-<details>
-<summary>Commandes de développement</summary>
-
-```bash
-# Exécuter les tests
-make test
-
-# Format code
-make format
-
-# Run linting
-make lint
-
-# Start Streamlit app
-make streamlit
-
-# Run Django server
-make django-run
-```
-
 </details>
 
 ## 📈 Usage Statistiques
 
 <!-- Add some charts or metrics about your project -->
 ![Project Stats](https://your-chart-url-here.com)
-
-## 🤝 Contribution
-
-Les contributions font de la communauté open source un endroit incroyable pour apprendre, inspirer et créer. Toutes vos contributions sont **grandement appréciées**.
-
-Voir [`CONTRIBUTING.md`](CONTRIBUTING.md) pour les façons de commencer.
-
-## 📝 Licence
-
-Ce projet est sous licence MIT - voir le fichier [`LICENSE`](LICENSE) pour plus de détails.
-
-## 📬 Contact
-
-Lien du Projet: [https://github.com/username/project-name](https://github.com/username/project-name)
-
----
 
 <div align="center">
 
