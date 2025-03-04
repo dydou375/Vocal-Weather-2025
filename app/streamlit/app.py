@@ -8,6 +8,7 @@ import requests
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from dotenv import load_dotenv
+import datetime
 
 
 
@@ -177,8 +178,8 @@ if st.session_state.forecast_response:
                     date = row['date'].strftime('%Y-%m-%d')
                     temperature_min = row['temperature_min']
                     temperature_max = row['temperature_max']
-                    sunrise = row['sunrise']
-                    sunset = row['sunset']
+                    sunrise = datetime.datetime.strptime(row['sunrise'], '%Y-%m-%dT%H:%M').strftime('%H:%M')
+                    sunset = datetime.datetime.strptime(row['sunset'], '%Y-%m-%dT%H:%M').strftime('%H:%M')
                     windspeed_max = row['windspeed_10m_max']
                     windspeed_min = row['windspeed_10m_min']
                     
@@ -190,9 +191,9 @@ if st.session_state.forecast_response:
 
                     # Afficher les informations avec les icônes
                     st.write(f"**{date}**")
-                    st.write(f"Température min: {temperature_min}°C {temperature_icon} Température max: {temperature_max}°C {temperature_icon}")
-                    st.write(f"Vent max: {windspeed_max} km/h {wind_icon} Vent min: {windspeed_min} km/h {wind_icon}")
-                    st.write(f"Lever de soleil: {sunrise} {sunrise_icon} Coucher de soleil: {sunset} {sunset_icon}")
+                    st.write(f" {temperature_icon}Température min: {temperature_min}°C,  {temperature_icon} Température max: {temperature_max}°C")
+                    st.write(f" {wind_icon}Vent min: {windspeed_min} km/h, {wind_icon} Vent max: {windspeed_max} km/h ")
+                    st.write(f" {sunrise_icon}Lever de soleil: {sunrise}, {sunset_icon} Coucher de soleil: {sunset}")
                     st.write("---")
             
             #---------------------------------- Prévision de la journée with hourly ---------------------------------
